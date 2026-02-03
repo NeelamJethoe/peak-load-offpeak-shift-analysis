@@ -1,0 +1,24 @@
+let
+  Source = #"00_raw",
+  #"Sorted rows" = Table.Sort(Source, {{"CustomerID", Order.Ascending}, {"Binnen geweest op", Order.Ascending}}),
+  #"Added index" = Table.AddIndexColumn(#"Sorted rows", "Index", 0, 1, Int64.Type),
+  #"Merged queries" = Table.NestedJoin(#"Added index", {"Index"}, prev, {"Index"}, "prev", JoinKind.LeftOuter),
+  #"Expanded prev" = Table.ExpandTableColumn(#"Merged queries", "prev", {"CustomerID", "Binnen geweest op"}, {"CustomerID.1", "Binnen geweest op.1"}),
+
+  #"Added DiffMinutes" =
+      Table.AddColumn(#"Expanded prev", "DiffMinutes",
+          each if [Binnen geweest op.1] = null then null
+          else Duration.TotalMinutes([Binnen geweest op] - [Binnen geweest op.1]),
+          type number),
+
+  #"Added IsDuplicate15" =
+      Table.AddColumn(#"Added DiffMinutes", "IsDuplicate15",
+          each if [Binnen geweest op.1] = null then false
+          else [CustomerID] = [CustomerID.1] and [DiffMinutes] >= 0 and [DiffMinutes] <= 15,
+          type logical),
+
+  #"Filtered duplicates" =
+      Table.SelectRows(#"Added IsDuplicate15", each [IsDuplicate15] = false),
+  #"Choose columns" = Table.SelectColumns(#"Filtered duplicates", {"CustomerID", "Leeftijd", "Abonnement / addon", "Binnen geweest op"})
+in
+  #"Choose columns"
